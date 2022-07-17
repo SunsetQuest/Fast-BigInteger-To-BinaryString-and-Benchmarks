@@ -1,0 +1,74 @@
+https://stackoverflow.com/questions/14048476/biginteger-to-hex-decimal-octal-binary-strings/15447131#15447131
+
+Here is one more for the binary version:  It is pretty fast (about 5x) at only 272ns for a 25-byte BigInteger to Binary String Conversion.  It also supports zero and negative numbers. It is the only one that supports negative numbers at the time of this writing. The function is fast because: (1) it minimally allocates memory (2) does not make many calls to other functions, and (3) carefully copies over bit to byte with as minimal work as possible.
+
+For the Hex version myBigInteger.ToString("X")) can be used.
+
+    /// <summary>
+    /// A high performance BigInteger to binary string converter
+    /// that supports 0 and negative numbers.
+    /// License: MIT / Created by Ryan Scott White, 7/16/2022;
+    /// </summary>
+    public static string BigIntegerToBinaryString(BigInteger x)
+    {
+        // Setup source
+        ReadOnlySpan<byte> srcBytes = x.ToByteArray();
+        int srcLoc = srcBytes.Length - 1;
+
+        // Find the first bit set in the first byte so we don't print extra zeros.
+        int msb = BitOperations.Log2(srcBytes[srcLoc]);
+        
+        // Setup Target
+        Span<char> dstBytes = stackalloc char[srcLoc * 8 + msb + 2];
+        int dstLoc = 0;
+
+        // Add leading '-' sign if negative.
+        if (x.Sign < 0)
+        {
+            dstBytes[dstLoc++] = '-';
+        }
+        //else if (!x.IsZero) dstBytes[dstLoc++] = '0'; // add adding leading '0' (optional)
+
+        // The first byte is special because we don't want to print leading zeros.
+        byte b = srcBytes[srcLoc--];
+        for (int j = msb; j >= 0; j--)
+        {
+            dstBytes[dstLoc++] = (char)('0' + ((b >> j) & 1));
+        }
+        
+        // Add the remaining bits.
+        for (; srcLoc >= 0; srcLoc--)
+        {
+            byte b2 = srcBytes[srcLoc];
+            for (int j = 7; j >= 0; j--)
+            {
+                dstBytes[dstLoc++] = (char)('0' + ((b2 >> j) & 1));
+            }
+        }
+
+        return dstBytes.ToString();
+    }
+
+**Benchmarks**
+
+BenchmarkDotNet=v0.13.1, OS=Windows 10.0.19044.1826 (21H2)
+AMD Ryzen Threadripper 1950X, 1 CPU, 32 logical and 16 physical cores
+.NET SDK=6.0.302, .NET 6.0.7 (6.0.722.32202), X64 RyuJIT
+
+|                       Method |  Size |          Mean |       Error |
+|----------------------------- |------:|--------------:|------------:|
+|             ToNBase_gkovacs90|   100 |  292,189.8 ns | 2,423.05 ns |
+|             ToNBase_gkovacs90|   150 |   91,539.8 ns | 1,287.92 ns |
+|             ToNBase_gkovacs90|    25 |   32,263.8 ns |   191.37 ns |
+|        ToBinaryString_mjs3339|   100 |    5,383.4 ns |    25.25 ns |
+|        ToBinaryString_mjs3339|    50 |    2,771.3 ns |    10.30 ns |
+|        ToBinaryString_mjs3339|    25 |    1,427.5 ns |     6.84 ns |
+|     ToBinaryString_Kevin_Rice|   100 |    5,398.9 ns |    94.98 ns |
+|     ToBinaryString_Kevin_Rice|    50 |    2,782.5 ns |    13.09 ns |
+|     ToBinaryString_Kevin_Rice|    25 |    1,422.3 ns |     6.47 ns |
+|         ToBinaryString_Ghasan|   100 |    4,782.8 ns |    29.03 ns |
+|         ToBinaryString_Ghasan|    50 |    2,584.2 ns |    19.57 ns |
+|         ToBinaryString_Ghasan|    25 |    1,422.0 ns |     4.97 ns |
+| BigIntegerToBinaryString_Ryan|   100 |      936.7 ns |     1.92 ns |
+| BigIntegerToBinaryString_Ryan|    50 |      495.6 ns |     2.93 ns |
+| BigIntegerToBinaryString_Ryan|    25 |      272.0 ns |     1.71 ns |
